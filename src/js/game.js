@@ -148,6 +148,12 @@ function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
 
+  // Cuenta atras de salida: el fantasma espera en la pen hasta soltarse.
+  if ( g.releaseIn > 0 ) {
+    g.releaseIn--;
+    return;
+  }
+
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
