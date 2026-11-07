@@ -24,7 +24,8 @@ Juego Pac-Man mínimo en JS vanilla puro. README en español; comentarios de có
 
 - El mapa se edita en `MAZE_STR` (maze.js): exactamente **31 strings de 28 caracteres**, simétrico verticalmente. Códigos: `#`=1 pared, `.`=2 dot, `-`=3 puerta, espacio=0 vacío.
 - `MAZE` es prístina y **nunca se muta**; `createGame()` la copia a `game.grid`. Borrar dots (o bloquear la puerta para pacman) se hace sobre `game.grid`.
-- `GHOST_STARTS` posiciona fantasmas dentro de la pen; los fantasmas sí atraviesan la puerta `-` (solo pacman la trata de muro, ver `isWall`).
+- `GHOST_STARTS` posiciona 4 fantasmas dentro de la pen con `kind` (`chaser`, `ambusher`, `vector`, `timid`) y `releaseIn` (frames de espera). Los fantasmas atraviesan la puerta `-` solo mientras están dentro de la pen (`exited === false`); tras salir por `PEN_EXIT`, también la tratan como muro (ver `isWall`).
+- Los 4 roles viven en `decideGhost`/`roleTarget`: chaser persigue directo, ambusher apunta 4 celdas delante de Pac-Man, vector usa la posición del rojo, timid huye a `TIMID_CORNER` a menos de `TIMID_DISTANCE`. Distancia euclídea al cuadrado, desempate `DIR_ORDER`.
 
 ## Movimiento (choque con la lógica si se cambia)
 
@@ -32,7 +33,8 @@ Juego Pac-Man mínimo en JS vanilla puro. README en español; comentarios de có
 - No hay delta time: todo está ligado a frames (`update`, animación de boca con `frame`). Meter setInterval o delta time es un cambio de diseño, no un fix puntual.
 - El input registra solo en `pacman.nextDir` (buffer); se aplica al estar alineado.
 - Túnel: fila 14, wrap horizontal cuando la celda destino sale de los bordes (`canMove` + `wrapTunnel`).
-- Fantasmas deciden dirección solo en centros de celda y no invierten rumbo salvo callejón (`decideGhost`).
+- Fantasmas deciden dirección solo en centros de celda y no invierten rumbo salvo callejón (`decideGhost`). Salen de la pen escalonados vía `releaseIn` (0/90/180/270 frames) y apuntan a `PEN_EXIT` mientras no hayan salido.
+- Depuración de objetivos: `window.DEBUG_GHOSTS = true` dibuja la línea fantasma→objetivo y un cuadrado en la celda objetivo (`drawGhostTargets` en render.js).
 
 ## Estilo del repo
 

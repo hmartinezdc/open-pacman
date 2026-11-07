@@ -134,6 +134,31 @@ function drawGhost( ctx, g, color ) {
   }
 }
 
+// Depuracion opcional activada con window.DEBUG_GHOSTS = true.
+// Dibuja la linea de cada fantasma a su objetivo y marca esa celda.
+function drawGhostTargets( ctx, ghosts ) {
+  if ( !window.DEBUG_GHOSTS ) return;
+  for ( let i = 0; i < ghosts.length; i++ ) {
+    const g = ghosts[ i ];
+    if ( !g.target ) continue;
+    const color = GHOST_COLORS[ i ] || '#ff0000';
+    const { cx, cy } = cellCenter( g.x, g.y );
+    const { cx: tx, cy: ty } = cellCenter( g.target.x, g.target.y );
+
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo( cx, cy );
+    ctx.lineTo( tx, ty );
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.9;
+    ctx.strokeRect( g.target.x * TILE + 3, g.target.y * TILE + 3, TILE - 6, TILE - 6 );
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawHUD( ctx, game, W ) {
   ctx.fillStyle = '#fff';
   ctx.font = '14px "Courier New", monospace';
@@ -144,7 +169,7 @@ function drawHUD( ctx, game, W ) {
   ctx.fillText( 'VIDAS ' + game.lives, W * TILE - 8, 4 );
 }
 
-const GHOST_COLORS = [ '#ff0000', '#00ffff', '#ffb8ff', '#ffb852' ];
+const GHOST_COLORS = [ '#ff0000', '#ffb8ff', '#00ffff', '#ffb852' ];
 
 function draw( ctx, game, frame ) {
   const grid = game.grid;
@@ -159,6 +184,7 @@ function draw( ctx, game, frame ) {
   drawDots( ctx, grid );
   drawPacman( ctx, game.pacman, frame );
   game.ghosts.forEach( ( g, i ) => drawGhost( ctx, g, GHOST_COLORS[ i ] || '#ff0000' ) );
+  drawGhostTargets( ctx, game.ghosts );
   drawHUD( ctx, game, W );
 }
 
