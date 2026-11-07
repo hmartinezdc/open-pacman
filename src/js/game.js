@@ -133,10 +133,33 @@ function decideGhost( game, g ) {
     return;
   }
 
-  // Roles chaser/ambusher/vector/timid llegan en los pasos 5 y 6:
-  // mientras tanto, fallback aleatorio.
-  g.target = null;
-  g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+  // Objetivo segun rol (chaser/ambusher); vector/timid llegan en el paso 6.
+  // null = rol sin objetivo definido: fallback aleatorio.
+  const target = roleTarget( game, g );
+  g.target = target;
+  if ( target === null ) {
+    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+    return;
+  }
+  g.dir = pickDirByDistance( g, choices, target );
+}
+
+// Objetivo de cada rol. Puede caer fuera del laberinto: solo sirve para
+// comparar distancias. Devuelve null si el rol no esta implementado.
+function roleTarget( game, g ) {
+  const p = game.pacman;
+  const px = Math.round( p.x );
+  const py = Math.round( p.y );
+
+  if ( g.kind === 'chaser' ) return { x: px, y: py };
+
+  if ( g.kind === 'ambusher' ) {
+    // 4 celdas delante de Pac-Man, en su direccion actual.
+    const d = DIRS[ p.dir ];
+    return { x: px + d.x * 4, y: py + d.y * 4 };
+  }
+
+  return null;
 }
 
 // Elige la direccion de choices con menor distancia euclidea al cuadrado
