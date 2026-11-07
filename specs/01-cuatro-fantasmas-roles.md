@@ -1,6 +1,6 @@
 # SPEC 01 — Cuatro fantasmas con roles distintos
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** ninguna spec previa
 > **Fecha:** 2026-11-06
 > **Objetivo:** Dar al juego cuatro fantasmas con comportamientos distintos —persecución directa, emboscada, vector y tímido— para que cada uno se juegue de forma diferente y solo uno presione agresivamente a Pac-Man.
