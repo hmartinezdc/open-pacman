@@ -16,6 +16,8 @@ const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 const PEN_EXIT = { x: 13, y: 11 }; // celda sobre la puerta de la pen
 const PEN_TOP_ROW = 12;            // y < 12 significa fuera de la pen
 const DIR_ORDER = [ 'up', 'left', 'down', 'right' ]; // desempate del arcade
+const TIMID_DISTANCE = 8;     // celdas: umbral del naranja persigue/huye
+const TIMID_CORNER = { x: 0, y: 30 }; // esquina inferior izquierda
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -133,8 +135,7 @@ function decideGhost( game, g ) {
     return;
   }
 
-  // Objetivo segun rol (chaser/ambusher); vector/timid llegan en el paso 6.
-  // null = rol sin objetivo definido: fallback aleatorio.
+  // Objetivo segun rol; null = rol sin objetivo definido: fallback aleatorio.
   const target = roleTarget( game, g );
   g.target = target;
   if ( target === null ) {
@@ -157,6 +158,27 @@ function roleTarget( game, g ) {
     // 4 celdas delante de Pac-Man, en su direccion actual.
     const d = DIRS[ p.dir ];
     return { x: px + d.x * 4, y: py + d.y * 4 };
+  }
+
+  if ( g.kind === 'vector' ) {
+    // Vector rojo->pivot (pacman + 2*dir) doblado: 2 * pivot - rojo.
+    const d = DIRS[ p.dir ];
+    const red = game.ghosts.find( ( other ) => other.kind === 'chaser' );
+    if ( !red ) return null;
+    return {
+      x: 2 * ( px + d.x * 2 ) - Math.round( red.x ),
+      y: 2 * ( py + d.y * 2 ) - Math.round( red.y ),
+    };
+  }
+
+  if ( g.kind === 'timid' ) {
+    const dx = Math.round( g.x ) - px;
+    const dy = Math.round( g.y ) - py;
+    // Persigue de lejos; de cerca huye a la esquina inferior izquierda.
+    if ( dx * dx + dy * dy > TIMID_DISTANCE * TIMID_DISTANCE ) {
+      return { x: px, y: py };
+    }
+    return TIMID_CORNER;
   }
 
   return null;
