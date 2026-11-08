@@ -53,12 +53,16 @@ const TUNNEL_ROW = 14;
 const PACMAN_START = { x: 13, y: 23 };
 const GHOST_STARTS = [
   { kind: 'chaser',   x: 13, y: 14, releaseIn: 0 },   // dentro de la pen
-  { kind: 'ambusher', x: 14, y: 14, releaseIn: 90 },  // dentro de la pen
-  { kind: 'vector',   x: 12, y: 14, releaseIn: 180 }, // dentro de la pen
-  { kind: 'timid',    x: 15, y: 14, releaseIn: 270 }, // dentro de la pen
+  { kind: 'ambusher', x: 14, y: 14, releaseIn: 60 },  // dentro de la pen
+  { kind: 'vector',   x: 12, y: 14, releaseIn: 120 }, // dentro de la pen
+  { kind: 'timid',    x: 15, y: 14, releaseIn: 180 }, // dentro de la pen
 ];
+
+// Espera corta tras perder una vida, en el mismo orden que GHOST_STARTS.
+const GHOST_RESPAWN_DELAYS = [ 0, 15, 30, 45 ];
 
 window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
 window.PACMAN_START = PACMAN_START;
 window.GHOST_STARTS = GHOST_STARTS;
+window.GHOST_RESPAWN_DELAYS = GHOST_RESPAWN_DELAYS;
