@@ -16,6 +16,9 @@ const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 const PEN_EXIT = { x: 13, y: 11 }; // celda sobre la puerta de la pen
 const PEN_COLUMN = PEN_EXIT.x;     // 13, columna de la puerta
 const PEN_TOP_ROW = 12;            // y < 12 significa fuera de la pen
+// Interior habitable de la pen (fila del tunel incluida): donde revolotean
+// los ojos a la espera de que expire el modo asustado.
+const PEN_BOX = { left: 11, right: 16, top: 13, bottom: 15 };
 const DIR_ORDER = [ 'up', 'left', 'down', 'right' ]; // desempate del arcade
 const TIMID_DISTANCE = 8;     // celdas: umbral del naranja persigue/huye
 const TIMID_CORNER = { x: 0, y: 30 }; // esquina inferior izquierda
@@ -87,6 +90,14 @@ function startFrightened( game ) {
 
 function aligned( v ) {
   return Math.abs( v - Math.round( v ) ) < 1e-3;
+}
+
+// Esta la celda (x,y) dentro del interior habitable de la pen?
+function insidePenBox( x, y ) {
+  const cx = Math.round( x );
+  const cy = Math.round( y );
+  return cx >= PEN_BOX.left && cx <= PEN_BOX.right &&
+    cy >= PEN_BOX.top && cy <= PEN_BOX.bottom;
 }
 
 // Una celda es muro para el actor dado?
@@ -165,7 +176,22 @@ function decideGhost( game, g ) {
   const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
 
   if ( g.returning ) {
-    // Ojos: apuntan a su celda de partida y pueden cruzar la puerta.
+    // Ojos: mientras el pellet siga activo y esten dentro de la pen,
+    // revolotean por su interior sin salir por la puerta ni el tunel.
+    if ( game.frightenedTimer > 0 && insidePenBox( g.x, g.y ) ) {
+      g.target = null;
+      g.returnFrames = 0; // parados no cuentan para el watchdog
+      const flutter = DIR_ORDER.filter( ( dir ) =>
+        dir !== OPPOSITE[ g.dir ] &&
+        insidePenBox( g.x + DIRS[ dir ].x, g.y + DIRS[ dir ].y ) &&
+        canMove( grid, g.x, g.y, dir, g )
+      );
+      if ( flutter.length ) {
+        g.dir = flutter[ Math.floor( Math.random() * flutter.length ) ];
+      }
+      return;
+    }
+    // Apuntan a su celda de partida y pueden cruzar la puerta.
     g.target = g.home;
     g.dir = pickDirByDistance( g, choices, g.home );
     return;
@@ -268,7 +294,17 @@ function pickDirByDistance( g, choices, target, flee ) {
 
 // Estado de ojos: vuelve a la pen tras ser comido. Con exited false puede
 // cruzar la puerta y no interacciona con Pac-Man.
-function startReturn( g ) {
+// Al entrar se ajusta la posicion al centro de celda mas cercano: los fantasmas
+// asustados avanzan a 0.05 y los ojos a 0.2, suma que no siempre cae en un
+// entero; sin el ajuste, aligned() fallaria y decideGhost/canMove no
+// volverian a ejecutarse.
+function startReturn( game, g ) {
+  // Ajuste al centro de celda mas cercano y envoltura del tunel (fila 14),
+  // antes de cambiar los flags: garantiza aligned() desde el frame siguiente.
+  g.x = Math.round( g.x );
+  g.y = Math.round( g.y );
+  wrapTunnel( g, game.grid[ 0 ].length );
+
   g.returning = true;
   g.frightened = false;
   g.exited = false;
@@ -311,13 +347,12 @@ function moveGhost( game, g ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
 
-    if ( g.returning ) {
-      // Los ojos llegan a su celda de partida: fantasma de vuelta.
-      if ( g.x === g.home.x && g.y === g.home.y ) {
-        finishReturn( game, g );
-        return;
-      }
-    } else if ( !g.exited && g.y < PEN_TOP_ROW ) {
+    if ( g.returning && g.x === g.home.x && g.y === g.home.y && game.frightenedTimer <= 0 ) {
+      // Pellet ya expirado: los ojos llegan a su celda de partida y vuelven a
+      // ser fantasma, esperando su retardo habitual antes de salir.
+      finishReturn( game, g );
+      return;
+    } else if ( !g.returning && !g.exited && g.y < PEN_TOP_ROW ) {
       // Al asomar sobre la pen, la puerta se cierra para este fantasma.
       g.exited = true;
     }
@@ -382,7 +417,7 @@ function update( game ) {
         GHOST_EAT_POINTS[ Math.min( game.ghostCombo, GHOST_EAT_POINTS.length - 1 ) ];
       game.score += pts;
       game.ghostCombo++;
-      startReturn( g );
+      startReturn( game, g );
       continue;
     }
 
