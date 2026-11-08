@@ -1,6 +1,6 @@
 // game.js
 // Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS, GHOST_RESPAWN_DELAYS.
+// PACMAN_START, GHOST_STARTS, GHOST_RESPAWN_DELAYS, POWER_TILE.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -20,6 +20,16 @@ const DIR_ORDER = [ 'up', 'left', 'down', 'right' ]; // desempate del arcade
 const TIMID_DISTANCE = 8;     // celdas: umbral del naranja persigue/huye
 const TIMID_CORNER = { x: 0, y: 30 }; // esquina inferior izquierda
 
+// Power pellet: puntos, duracion del modo asustado y velocidades nuevas.
+// Todas las velocidades son fracciones que caen en enteros (ver aligned()).
+const POWER_SCORE = 50;
+const FRIGHTENED_FRAMES = 360;        // ~6 s a 60 fps
+const FRIGHTENED_FLASH_FRAMES = 120;  // ultimos ~2 s: los fantasmas parpadean
+const FRIGHTENED_SPEED = 0.05;        // mitad de GHOST_SPEED
+const RETURN_SPEED = 0.2;             // ojos volviendo a la pen
+const RETURN_TIMEOUT_FRAMES = 600;    // watchdog por si la vuelta se atasca
+const GHOST_EAT_POINTS = [ 200, 400, 800, 1600 ];
+
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
 function createGame() {
@@ -27,8 +37,9 @@ function createGame() {
   // La celda de inicio de Pacman arranca sin dot.
   grid[ PACMAN_START.y ][ PACMAN_START.x ] = 0;
 
+  // Comestibles: dots (2) y power pellets (4). Los cuatro pellets ganan.
   let dots = 0;
-  for ( const row of grid ) for ( const v of row ) if ( v === 2 ) dots++;
+  for ( const row of grid ) for ( const v of row ) if ( v === 2 || v === POWER_TILE ) dots++;
 
   return {
     state: 'start',
@@ -36,6 +47,8 @@ function createGame() {
     lives: 3,
     dotsRemaining: dots,
     grid,
+    frightenedTimer: 0, // frames restantes del modo asustado
+    ghostCombo: 0,      // fantasmas comidos con el pellet actual
     pacman: {
       x: PACMAN_START.x,
       y: PACMAN_START.y,
@@ -50,10 +63,26 @@ function createGame() {
       speed: GHOST_SPEED,
       kind: g.kind,
       exited: false,
+      home: { x: g.x, y: g.y }, // celda de partida; ahi vuelven los ojos
+      frightened: false,        // asustado por un pellet activo
+      returning: false,         // ojos volviendo a la pen
+      returnFrames: 0,
       releaseIn: g.releaseIn,
       target: null,
     } ) ),
   };
+}
+
+// Activa el modo asustado: reinicia temporizador y combo, asusta a los
+// fantasmas y hace que los que ya salieron inviertan el rumbo una vez.
+function startFrightened( game ) {
+  game.frightenedTimer = FRIGHTENED_FRAMES;
+  game.ghostCombo = 0;
+  for ( const g of game.ghosts ) {
+    if ( g.returning ) continue;
+    if ( !g.frightened && g.exited ) g.dir = OPPOSITE[ g.dir ];
+    g.frightened = true;
+  }
 }
 
 function aligned( v ) {
@@ -104,11 +133,17 @@ function movePacman( game ) {
       p.dir = p.nextDir;
       p.nextDir = null;
     }
-    // Comer dot.
-    if ( grid[ p.y ][ p.x ] === 2 ) {
+    // Comer dot o power pellet.
+    const cell = grid[ p.y ][ p.x ];
+    if ( cell === 2 ) {
       grid[ p.y ][ p.x ] = 0;
       game.score += 10;
       game.dotsRemaining--;
+    } else if ( cell === POWER_TILE ) {
+      grid[ p.y ][ p.x ] = 0;
+      game.score += POWER_SCORE;
+      game.dotsRemaining--;
+      startFrightened( game );
     }
     // Si no puede seguir, se detiene en la celda.
     if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
@@ -129,6 +164,13 @@ function decideGhost( game, g ) {
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
 
+  if ( g.returning ) {
+    // Ojos: apuntan a su celda de partida y pueden cruzar la puerta.
+    g.target = g.home;
+    g.dir = pickDirByDistance( g, choices, g.home );
+    return;
+  }
+
   if ( !g.exited ) {
     // Modo de salida: ignorar el rol y salir por ruta determinista:
     // centrarse horizontalmente en la columna de la puerta y luego subir.
@@ -144,6 +186,14 @@ function decideGhost( game, g ) {
       // Respaldo: no deberia darse en el laberinto actual.
       g.dir = pickDirByDistance( g, choices, PEN_EXIT );
     }
+    return;
+  }
+
+  // Asustado: huir, eligiendo la direccion que mas se aleja de Pac-Man.
+  if ( g.frightened ) {
+    const p = game.pacman;
+    g.target = { x: Math.round( p.x ), y: Math.round( p.y ) };
+    g.dir = pickDirByDistance( g, choices, g.target, true );
     return;
   }
 
@@ -196,18 +246,19 @@ function roleTarget( game, g ) {
   return null;
 }
 
-// Elige la direccion de choices con menor distancia euclidea al cuadrado
-// hasta el objetivo. Empate: el primero en DIR_ORDER.
-function pickDirByDistance( g, choices, target ) {
+// Elige la direccion de choices con la mejor distancia euclidea al cuadrado
+// hasta el objetivo: la menor, o la mayor si flee (huida). Empate: el
+// primero en DIR_ORDER.
+function pickDirByDistance( g, choices, target, flee ) {
   let best = choices[ 0 ];
-  let bestDist = Infinity;
+  let bestDist = flee ? -Infinity : Infinity;
   for ( const dir of choices ) {
     const d = DIRS[ dir ];
     const nx = g.x + d.x;
     const ny = g.y + d.y;
     const dist =
       ( nx - target.x ) * ( nx - target.x ) + ( ny - target.y ) * ( ny - target.y );
-    if ( dist < bestDist ) {
+    if ( flee ? dist > bestDist : dist < bestDist ) {
       bestDist = dist;
       best = dir;
     }
@@ -215,12 +266,43 @@ function pickDirByDistance( g, choices, target ) {
   return best;
 }
 
+// Estado de ojos: vuelve a la pen tras ser comido. Con exited false puede
+// cruzar la puerta y no interacciona con Pac-Man.
+function startReturn( g ) {
+  g.returning = true;
+  g.frightened = false;
+  g.exited = false;
+  g.returnFrames = 0;
+  g.target = null;
+}
+
+function finishReturn( game, g ) {
+  // De vuelta en su celda: espera su retardo habitual y sale por la puerta.
+  const i = game.ghosts.indexOf( g );
+  g.x = g.home.x;
+  g.y = g.home.y;
+  g.dir = 'up';
+  g.exited = false;
+  g.returning = false;
+  g.returnFrames = 0;
+  g.frightened = false;
+  g.releaseIn = GHOST_RESPAWN_DELAYS[ i ];
+  g.target = null;
+}
+
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
 
-  // Cuenta atras de salida: el fantasma espera en la pen hasta soltarse.
-  if ( g.releaseIn > 0 ) {
+  if ( g.returning ) {
+    // Reloj de seguridad: si la vuelta codiciosa se atasca, regreso directo.
+    g.returnFrames++;
+    if ( g.returnFrames > RETURN_TIMEOUT_FRAMES ) {
+      finishReturn( game, g );
+      return;
+    }
+  } else if ( g.releaseIn > 0 ) {
+    // Cuenta atras de salida: el fantasma espera en la pen hasta soltarse.
     g.releaseIn--;
     return;
   }
@@ -228,15 +310,27 @@ function moveGhost( game, g ) {
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
-    // Al asomar sobre la pen, la puerta se cierra para este fantasma.
-    if ( !g.exited && g.y < PEN_TOP_ROW ) g.exited = true;
+
+    if ( g.returning ) {
+      // Los ojos llegan a su celda de partida: fantasma de vuelta.
+      if ( g.x === g.home.x && g.y === g.home.y ) {
+        finishReturn( game, g );
+        return;
+      }
+    } else if ( !g.exited && g.y < PEN_TOP_ROW ) {
+      // Al asomar sobre la pen, la puerta se cierra para este fantasma.
+      g.exited = true;
+    }
+
     decideGhost( game, g );
     if ( !canMove( grid, g.x, g.y, g.dir, g ) ) return;
   }
 
+  const speed =
+    g.returning ? RETURN_SPEED : ( g.frightened ? FRIGHTENED_SPEED : g.speed );
   const d = DIRS[ g.dir ];
-  g.x += d.x * g.speed;
-  g.y += d.y * g.speed;
+  g.x += d.x * speed;
+  g.y += d.y * speed;
   wrapTunnel( g, width );
 }
 
@@ -246,11 +340,17 @@ function resetPositions( game ) {
   p.y = PACMAN_START.y;
   p.dir = 'left';
   p.nextDir = null;
+  // Una muerte corta el modo asustado.
+  game.frightenedTimer = 0;
+  game.ghostCombo = 0;
   game.ghosts.forEach( ( g, i ) => {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
     g.exited = false;
+    g.frightened = false;
+    g.returning = false;
+    g.returnFrames = 0;
     // Tras una muerte la espera es corta, no el retardo inicial.
     g.releaseIn = GHOST_RESPAWN_DELAYS[ i ];
     g.target = null;
@@ -262,19 +362,37 @@ function collides( a, b ) {
 }
 
 function update( game ) {
+  // El modo asustado se agota frame a frame; al terminar todos se asientan.
+  if ( game.frightenedTimer > 0 ) {
+    game.frightenedTimer--;
+    if ( game.frightenedTimer === 0 ) {
+      for ( const g of game.ghosts ) g.frightened = false;
+    }
+  }
+
   movePacman( game );
   game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
 
   for ( const g of game.ghosts ) {
-    if ( collides( game.pacman, g ) ) {
-      game.lives--;
-      if ( game.lives <= 0 ) {
-        game.state = 'lost';
-        return;
-      }
-      resetPositions( game );
-      break;
+    if ( g.returning || !collides( game.pacman, g ) ) continue;
+
+    if ( g.frightened ) {
+      // Comer fantasma: puntos por combo y a la pen como ojos.
+      const pts =
+        GHOST_EAT_POINTS[ Math.min( game.ghostCombo, GHOST_EAT_POINTS.length - 1 ) ];
+      game.score += pts;
+      game.ghostCombo++;
+      startReturn( g );
+      continue;
     }
+
+    game.lives--;
+    if ( game.lives <= 0 ) {
+      game.state = 'lost';
+      return;
+    }
+    resetPositions( game );
+    break;
   }
 
   if ( game.dotsRemaining <= 0 ) game.state = 'won';
@@ -283,3 +401,4 @@ function update( game ) {
 window.createGame = createGame;
 window.update = update;
 window.DIRS = DIRS;
+window.FRIGHTENED_FLASH_FRAMES = FRIGHTENED_FLASH_FRAMES;
