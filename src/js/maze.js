@@ -61,8 +61,9 @@ const GHOST_STARTS = [
   { kind: 'timid',    x: 15, y: 14, releaseIn: 180 }, // dentro de la pen
 ];
 
-// Espera corta tras perder una vida, en el mismo orden que GHOST_STARTS.
-const GHOST_RESPAWN_DELAYS = [ 0, 15, 30, 45 ];
+// Espera tras la reconstruccion (ojos ya llegados a home), escalonada en el
+// mismo orden que GHOST_STARTS: 1.5-3 s reparte la salida y se percibe mejor.
+const GHOST_RESPAWN_DELAYS = [ 90, 120, 150, 180 ];
 
 window.MAZE = MAZE;
 window.TUNNEL_ROW = TUNNEL_ROW;
