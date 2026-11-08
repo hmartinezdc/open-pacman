@@ -33,7 +33,8 @@ Juego Pac-Man mínimo en JS vanilla puro. README en español; comentarios de có
 - No hay delta time: todo está ligado a frames (`update`, animación de boca con `frame`). Meter setInterval o delta time es un cambio de diseño, no un fix puntual.
 - El input registra solo en `pacman.nextDir` (buffer); se aplica al estar alineado.
 - Túnel: fila 14, wrap horizontal cuando la celda destino sale de los bordes (`canMove` + `wrapTunnel`).
-- Fantasmas deciden dirección solo en centros de celda y no invierten rumbo salvo callejón (`decideGhost`). Salen de la pen escalonados vía `releaseIn` (0/90/180/270 frames) y apuntan a `PEN_EXIT` mientras no hayan salido.
+- Fantasmas deciden dirección solo en centros de celda y no invierten rumbo salvo callejón (`decideGhost`). Salen de la pen escalonados vía `releaseIn` (0/60/120/180 frames en `GHOST_STARTS`) y apuntan a `PEN_EXIT` mientras no hayan salido. Tras perder una vida, la espera es corta: `GHOST_RESPAWN_DELAYS = [0, 15, 30, 45]` (maze.js), asignada por `resetPositions`.
+- Mientras `exited === false`, la salida es una ruta determinista: primero un tramo horizontal hacia `PEN_COLUMN` (la columna de la puerta, x=13) y luego un tramo vertical por la puerta; nunca invierte el sentido horizontal. Solo si la ruta no puede avanzar se usa el respaldo por distancia (`pickDirByDistance`).
 - Depuración de objetivos: `window.DEBUG_GHOSTS = true` dibuja la línea fantasma→objetivo y un cuadrado en la celda objetivo (`drawGhostTargets` en render.js).
 
 ## Estilo del repo

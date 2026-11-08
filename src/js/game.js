@@ -1,6 +1,6 @@
 // game.js
 // Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS.
+// PACMAN_START, GHOST_STARTS, GHOST_RESPAWN_DELAYS.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -14,6 +14,7 @@ const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 
 const PEN_EXIT = { x: 13, y: 11 }; // celda sobre la puerta de la pen
+const PEN_COLUMN = PEN_EXIT.x;     // 13, columna de la puerta
 const PEN_TOP_ROW = 12;            // y < 12 significa fuera de la pen
 const DIR_ORDER = [ 'up', 'left', 'down', 'right' ]; // desempate del arcade
 const TIMID_DISTANCE = 8;     // celdas: umbral del naranja persigue/huye
@@ -129,9 +130,20 @@ function decideGhost( game, g ) {
   const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
 
   if ( !g.exited ) {
-    // Modo de salida: ignorar el rol y dirigirse a la celda sobre la puerta.
+    // Modo de salida: ignorar el rol y salir por ruta determinista:
+    // centrarse horizontalmente en la columna de la puerta y luego subir.
     g.target = PEN_EXIT;
-    g.dir = pickDirByDistance( g, choices, PEN_EXIT );
+    const gx = Math.round( g.x );
+    if ( gx < PEN_COLUMN && canMove( grid, g.x, g.y, 'right', g ) ) {
+      g.dir = 'right';
+    } else if ( gx > PEN_COLUMN && canMove( grid, g.x, g.y, 'left', g ) ) {
+      g.dir = 'left';
+    } else if ( canMove( grid, g.x, g.y, 'up', g ) ) {
+      g.dir = 'up';
+    } else {
+      // Respaldo: no deberia darse en el laberinto actual.
+      g.dir = pickDirByDistance( g, choices, PEN_EXIT );
+    }
     return;
   }
 
@@ -239,7 +251,8 @@ function resetPositions( game ) {
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
     g.exited = false;
-    g.releaseIn = GHOST_STARTS[ i ].releaseIn;
+    // Tras una muerte la espera es corta, no el retardo inicial.
+    g.releaseIn = GHOST_RESPAWN_DELAYS[ i ];
     g.target = null;
   } );
 }
