@@ -1,6 +1,6 @@
 # SPEC 04 — Regreso fiable de los fantasmas comidos a la pen
 
-> **Estado:** Aprobado
+> **Estado:** implementado
 > **Depende de:** SPEC 03
 > **Fecha:** 2026-11-08
 > **Objetivo:** Corregir el regreso de los ojos para que cualquier fantasma comido, desde cualquier posición fraccionaria, navegue por el laberinto hasta su celda `home` y se reconstruya allí con `GHOST_RESPAWN_DELAYS`.
