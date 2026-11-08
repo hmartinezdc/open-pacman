@@ -268,7 +268,17 @@ function pickDirByDistance( g, choices, target, flee ) {
 
 // Estado de ojos: vuelve a la pen tras ser comido. Con exited false puede
 // cruzar la puerta y no interacciona con Pac-Man.
-function startReturn( g ) {
+// Al entrar se ajusta la posicion al centro de celda mas cercano: los fantasmas
+// asustados avanzan a 0.05 y los ojos a 0.2, suma que no siempre cae en un
+// entero; sin el ajuste, aligned() fallaria y decideGhost/canMove no
+// volverian a ejecutarse.
+function startReturn( game, g ) {
+  // Ajuste al centro de celda mas cercano y envoltura del tunel (fila 14),
+  // antes de cambiar los flags: garantiza aligned() desde el frame siguiente.
+  g.x = Math.round( g.x );
+  g.y = Math.round( g.y );
+  wrapTunnel( g, game.grid[ 0 ].length );
+
   g.returning = true;
   g.frightened = false;
   g.exited = false;
@@ -382,7 +392,7 @@ function update( game ) {
         GHOST_EAT_POINTS[ Math.min( game.ghostCombo, GHOST_EAT_POINTS.length - 1 ) ];
       game.score += pts;
       game.ghostCombo++;
-      startReturn( g );
+      startReturn( game, g );
       continue;
     }
 
